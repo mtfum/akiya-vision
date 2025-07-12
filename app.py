@@ -32,8 +32,19 @@ app.add_middleware(
 )
 
 # Mount static files and templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+import sys
+from pathlib import Path
+
+# Get the project root directory
+if hasattr(sys, '_MEIPASS'):
+    # Running in PyInstaller bundle
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    # Running in normal Python environment
+    BASE_DIR = Path(__file__).resolve().parent
+
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # Data models
 class House(BaseModel):
@@ -255,16 +266,17 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
             image_input = image["data"]
         elif image["data"].startswith("/static/demo-images/"):
             # It's a local demo image - read the file and convert to base64
-            file_path = image["data"].replace("/static/", "static/")
+            file_path = BASE_DIR / image["data"].replace("/static/", "static/")
             
             try:
                 with open(file_path, "rb") as f:
                     file_content = f.read()
                     file_base64 = base64.b64encode(file_content).decode("utf-8")
                     # Determine mime type from extension
-                    if file_path.endswith(".jpg") or file_path.endswith(".jpeg"):
+                    file_path_str = str(file_path)
+                    if file_path_str.endswith(".jpg") or file_path_str.endswith(".jpeg"):
                         mime_type = "image/jpeg"
-                    elif file_path.endswith(".png"):
+                    elif file_path_str.endswith(".png"):
                         mime_type = "image/png"
                     else:
                         mime_type = "image/jpeg"  # default
