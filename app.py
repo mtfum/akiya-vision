@@ -43,15 +43,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         
         # Content Security Policy - adjust as needed
+        nonce = base64.b64encode(os.urandom(16)).decode('utf-8')
         csp = (
-            "default-src 'self'; "
-            "script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
+            f"default-src 'self'; "
+            f"script-src 'self' https://cdn.tailwindcss.com 'nonce-{nonce}'; "
+            f"style-src 'self' 'nonce-{nonce}'; "
             "img-src 'self' data: https:; "
             "font-src 'self'; "
             "connect-src 'self'; "
             "frame-ancestors 'none';"
         )
+        response.headers["Content-Security-Policy"] = csp
+        response.headers["X-Nonce"] = nonce
         response.headers["Content-Security-Policy"] = csp
         
         return response
