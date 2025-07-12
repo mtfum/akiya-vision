@@ -89,7 +89,14 @@ else:
     # Running in normal Python environment
     BASE_DIR = Path(__file__).resolve().parent
 
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+# Mount public folder for local development
+if (BASE_DIR / "public").exists():
+    app.mount("/public", StaticFiles(directory=str(BASE_DIR / "public")), name="public")
+
+# Also mount static for backward compatibility if it exists
+if (BASE_DIR / "static").exists():
+    app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # Data models
@@ -115,19 +122,19 @@ DEMO_IMAGES = {
         {
             "id": "demo1",
             "name": "台所",
-            "url": "/static/demo-images/demo1.jpg",
+            "url": "/public/demo1.jpg",
             "description": "Kitchen"
         },
         {
             "id": "demo2", 
             "name": "外観",
-            "url": "/static/demo-images/demo2.jpg",
+            "url": "/public/demo2.jpg",
             "description": "Exterior view"
         },
         {
             "id": "demo3",
             "name": "廊下",
-            "url": "/static/demo-images/demo3.jpeg",
+            "url": "/public/demo3.jpeg",
             "description": "Corridor"
         }
     ],
@@ -135,19 +142,19 @@ DEMO_IMAGES = {
         {
             "id": "demo4",
             "name": "和室",
-            "url": "/static/demo-images/demo4.jpeg",
+            "url": "/public/demo4.jpeg",
             "description": "Japanese-style room"
         },
         {
             "id": "demo5",
             "name": "空き部屋",
-            "url": "/static/demo-images/demo5.jpg",
+            "url": "/public/demo5.jpg",
             "description": "Empty room"
         },
         {
             "id": "demo6",
             "name": "リビング",
-            "url": "/static/demo-images/demo6.jpg",
+            "url": "/public/demo6.jpg",
             "description": "Living room"
         }
     ]
@@ -335,44 +342,17 @@ async def renovate_image(house_id: str, image_id: str, renovation_request: Renov
         elif image["data"].startswith("http"):
             # It's a URL - use directly
             image_input = image["data"]
-        elif image["data"].startswith("/static/demo-images/"):
-            # It's a local demo image - read the file and convert to base64
-            # Extract just the filename to prevent path traversal
-            filename = os.path.basename(image["data"])
+        elif image["data"].startswith("/public/"):
+            # In production on Vercel, these images are served from public folder
+            # The Replicate API can accept URLs
             
-            # Validate filename - only allow specific demo images
-            allowed_files = ["demo1.jpg", "demo2.jpg", "demo3.jpeg", 
-                           "demo4.jpeg", "demo5.jpg", "demo6.jpg"]
+            # Get the base URL from the request
+            base_url = str(request.base_url).rstrip('/')
             
-            if filename not in allowed_files:
-                raise HTTPException(status_code=400, detail="Invalid demo image")
+            # Construct the full URL for the image
+            image_input = f"{base_url}{image['data']}"
             
-            # Construct safe path using BASE_DIR for Vercel compatibility
-            file_path = BASE_DIR / "static" / "demo-images" / filename
-            
-            # Additional check to ensure we're within the demo-images directory
-            abs_path = os.path.abspath(str(file_path))
-            demo_dir = os.path.abspath(str(BASE_DIR / "static" / "demo-images"))
-            
-            if not abs_path.startswith(demo_dir):
-                raise HTTPException(status_code=400, detail="Invalid file path")
-            
-            try:
-                with open(file_path, "rb") as f:
-                    file_content = f.read()
-                    file_base64 = base64.b64encode(file_content).decode("utf-8")
-                    # Determine mime type from extension
-                    file_path_str = str(file_path)
-                    if file_path_str.endswith(".jpg") or file_path_str.endswith(".jpeg"):
-                        mime_type = "image/jpeg"
-                    elif file_path_str.endswith(".png"):
-                        mime_type = "image/png"
-                    else:
-                        mime_type = "image/jpeg"  # default
-                    image_input = f"data:{mime_type};base64,{file_base64}"
-            except Exception as e:
-                # Don't expose internal error details
-                raise HTTPException(status_code=500, detail="Failed to process image")
+            print(f"Using demo image URL: {image_input}")
         else:
             # Assume it's base64 without data URL prefix
             image_input = f"data:image/png;base64,{image['data']}"
