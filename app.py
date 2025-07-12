@@ -176,8 +176,8 @@ def get_demo_houses() -> Dict[str, House]:
         )
     }
 
-# In-memory storage - initialized with demo data
-houses_db: Dict[str, House] = get_demo_houses()
+# In-memory storage - will be populated on each request in serverless
+houses_db: Dict[str, House] = {}
 
 # Renovation styles and prompts
 RENOVATION_STYLES = {
@@ -253,10 +253,9 @@ async def root(request: Request):
 @limiter.limit("100/minute")
 async def get_houses(request: Request):
     """Get all houses"""
-    # Ensure demo data is available in serverless environment
-    if not houses_db:
-        houses_db.update(get_demo_houses())
-    return list(houses_db.values())
+    # Always return demo data in serverless environment
+    demo_houses = get_demo_houses()
+    return list(demo_houses.values())
 
 @app.get("/api/demo-images/{house_type}")
 @limiter.limit("100/minute")
@@ -274,14 +273,13 @@ async def get_demo_images(house_type: str, request: Request):
 @limiter.limit("10/hour")  # Strict limit for expensive AI operations
 async def renovate_image(house_id: str, image_id: str, renovation_request: RenovateRequest, request: Request):
     """Generate a renovated version of the image"""
-    # Ensure demo data is available in serverless environment
-    if not houses_db:
-        houses_db.update(get_demo_houses())
+    # Get demo houses for serverless environment
+    demo_houses = get_demo_houses()
     
-    if house_id not in houses_db:
+    if house_id not in demo_houses:
         raise HTTPException(status_code=404, detail="House not found")
     
-    house = houses_db[house_id]
+    house = demo_houses[house_id]
     
     # Check if it's a demo image
     if image_id.startswith("demo-"):
@@ -415,8 +413,8 @@ async def renovate_image(house_id: str, image_id: str, renovation_request: Renov
             "generated_at": datetime.now().isoformat()
         }
         
-        # Add to images list with metadata
-        house.images.append(generated_image)
+        # Note: In serverless, we don't persist the generated images
+        # They would need to be stored in a database or external storage
         
         return {
             "id": generated_image["id"],
