@@ -66,7 +66,7 @@ allowed_origins = [
     "http://127.0.0.1:8000",
     # Add your production domain here when deploying
     # "https://your-domain.com"
-    "https://*.vercel.app",  # Allow Vercel preview deployments
+    "*",  # Allow all origins temporarily for debugging
 ]
 
 app.add_middleware(
@@ -245,19 +245,32 @@ RENOVATION_STYLES = {
     }
 }
 
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
 @app.get("/", response_class=HTMLResponse)
 @limiter.limit("100/minute")
 async def root(request: Request):
     """Serve the main page"""
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/api/houses")
 @limiter.limit("100/minute")
 async def get_houses(request: Request):
     """Get all houses"""
-    # Always return demo data in serverless environment
-    demo_houses = get_demo_houses()
-    return list(demo_houses.values())
+    try:
+        # Always return demo data in serverless environment
+        demo_houses = get_demo_houses()
+        houses_list = list(demo_houses.values())
+        print(f"Returning {len(houses_list)} houses")
+        return houses_list
+    except Exception as e:
+        print(f"Error in get_houses: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching houses: {str(e)}")
 
 @app.get("/api/demo-images/{house_type}")
 @limiter.limit("100/minute")
