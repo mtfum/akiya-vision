@@ -140,3 +140,35 @@ vercel
 ```bash
 vercel --prod
 ```
+
+### Automatic Deployment with GitHub Actions
+
+To enable automatic deployment when pushing to main branch:
+
+1. **Connect your GitHub repository to Vercel:**
+   ```bash
+   vercel link
+   ```
+
+2. **Get your Vercel credentials:**
+   - Go to [Vercel Account Settings](https://vercel.com/account/tokens)
+   - Create a new token and save it
+   - Go to your project's Settings → General
+   - Copy your Org ID and Project ID
+
+3. **Add GitHub Secrets:**
+   Go to your GitHub repository → Settings → Secrets and variables → Actions, then add:
+   - `VERCEL_TOKEN`: Your Vercel access token
+   - `VERCEL_ORG_ID`: Your Vercel organization ID
+   - `VERCEL_PROJECT_ID`: Your Vercel project ID
+
+4. **Push to main branch:**
+   ```bash
+   git add .
+   git commit -m "Enable automatic deployment"
+   git push origin main
+   ```
+
+Now your app will automatically deploy to Vercel when you:
+- Push to `main` branch → Production deployment
+- Create a pull request → Preview deployment with comment
