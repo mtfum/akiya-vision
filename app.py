@@ -107,7 +107,9 @@ class RenovateRequest(BaseModel):
     style: str = Field(..., min_length=1, max_length=50, pattern="^[a-zA-Z_]+$")
     image_url: Optional[str] = Field(None, max_length=5000)
 
-# Demo images for each house type - using local images
+# Demo images for each house type
+# In production, these could be hosted on a CDN or external storage
+# For now, using local paths that will be served by Vercel
 DEMO_IMAGES = {
     "kominka": [
         {
