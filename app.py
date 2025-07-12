@@ -43,18 +43,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         
         # Content Security Policy - adjust as needed
-        nonce = base64.b64encode(os.urandom(16)).decode('utf-8')
         csp = (
-            f"default-src 'self'; "
-            f"script-src 'self' https://cdn.tailwindcss.com 'nonce-{nonce}'; "
-            f"style-src 'self' 'nonce-{nonce}'; "
+            "default-src 'self'; "
+            "script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; "
+            "style-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; "
             "img-src 'self' data: https:; "
-            "font-src 'self'; "
+            "font-src 'self' https://fonts.gstatic.com; "
             "connect-src 'self'; "
             "frame-ancestors 'none';"
         )
-        response.headers["Content-Security-Policy"] = csp
-        response.headers["X-Nonce"] = nonce
         response.headers["Content-Security-Policy"] = csp
         
         return response
@@ -69,6 +66,7 @@ allowed_origins = [
     "http://127.0.0.1:8000",
     # Add your production domain here when deploying
     # "https://your-domain.com"
+    "https://*.vercel.app",  # Allow Vercel preview deployments
 ]
 
 app.add_middleware(
