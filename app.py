@@ -12,23 +12,68 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
+from pydantic import BaseModel, validator, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 # Initialize FastAPI app
 app = FastAPI(title="AkiyaVision", version="1.0.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configure CORS
+# Security headers middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        
+        # Security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        # Content Security Policy - adjust as needed
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+        response.headers["Content-Security-Policy"] = csp
+        
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Configure CORS - Restrict to specific origins in production
+# For development, you can add localhost origins
+allowed_origins = [
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+    # Add your production domain here when deploying
+    # "https://your-domain.com"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 # Mount static files and templates
@@ -58,8 +103,8 @@ class House(BaseModel):
     images: List[Dict[str, str]] = []
 
 class RenovateRequest(BaseModel):
-    style: str
-    image_url: Optional[str] = None
+    style: str = Field(..., min_length=1, max_length=50, pattern="^[a-zA-Z_]+$")
+    image_url: Optional[str] = Field(None, max_length=5000)
 
 # Demo images for each house type - using local images
 DEMO_IMAGES = {
@@ -194,17 +239,20 @@ RENOVATION_STYLES = {
 }
 
 @app.get("/", response_class=HTMLResponse)
+@limiter.limit("100/minute")
 async def root(request: Request):
     """Serve the main page"""
     return templates.TemplateResponse(request, "index.html")
 
 @app.get("/api/houses")
-async def get_houses():
+@limiter.limit("100/minute")
+async def get_houses(request: Request):
     """Get all houses"""
     return list(houses_db.values())
 
 @app.get("/api/demo-images/{house_type}")
-async def get_demo_images(house_type: str):
+@limiter.limit("100/minute")
+async def get_demo_images(house_type: str, request: Request):
     """Get demo images for a house type"""
     if house_type == "house1":
         return DEMO_IMAGES.get("kominka", [])
@@ -215,7 +263,8 @@ async def get_demo_images(house_type: str):
 
 
 @app.post("/api/renovate/{house_id}/{image_id}")
-async def renovate_image(house_id: str, image_id: str, request: RenovateRequest):
+@limiter.limit("10/hour")  # Strict limit for expensive AI operations
+async def renovate_image(house_id: str, image_id: str, renovation_request: RenovateRequest, request: Request):
     """Generate a renovated version of the image"""
     if house_id not in houses_db:
         raise HTTPException(status_code=404, detail="House not found")
@@ -225,19 +274,19 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
     # Check if it's a demo image
     if image_id.startswith("demo-"):
         # For demo images, create a temporary image entry using the provided URL
-        if not request.image_url:
+        if not renovation_request.image_url:
             raise HTTPException(status_code=400, detail="Image URL required for demo images")
-        image = {"id": image_id, "data": request.image_url}
+        image = {"id": image_id, "data": renovation_request.image_url}
     else:
         # Look for uploaded image
         image = next((img for img in house.images if img["id"] == image_id), None)
         if not image:
             raise HTTPException(status_code=404, detail="Image not found")
     
-    if request.style not in RENOVATION_STYLES:
+    if renovation_request.style not in RENOVATION_STYLES:
         raise HTTPException(status_code=400, detail="Invalid style")
     
-    style_config = RENOVATION_STYLES[request.style]
+    style_config = RENOVATION_STYLES[renovation_request.style]
     
     # Check if Replicate API token is configured
     if not os.getenv("REPLICATE_API_TOKEN"):
@@ -246,7 +295,7 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
             "id": f"mock-{uuid.uuid4()}",
             "status": "succeeded",
             "output": [image["data"]],  # Return original image as mock
-            "style": request.style,
+            "style": renovation_request.style,
             "message": "Mock response - configure REPLICATE_API_TOKEN for real generation"
         }
     
@@ -255,9 +304,6 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
         import replicate
         
         # Handle different image formats
-        print(f"Processing image data type: {type(image['data'])}")
-        print(f"Image data preview: {image['data'][:100] if image['data'] else 'None'}")
-        
         if image["data"].startswith("data:"):
             # It's a base64 data URL
             image_input = image["data"]
@@ -266,7 +312,26 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
             image_input = image["data"]
         elif image["data"].startswith("/static/demo-images/"):
             # It's a local demo image - read the file and convert to base64
-            file_path = BASE_DIR / image["data"].replace("/static/", "static/")
+            # Extract just the filename to prevent path traversal
+            import os.path
+            filename = os.path.basename(image["data"])
+            
+            # Validate filename - only allow specific demo images
+            allowed_files = ["demo1.jpg", "demo2.jpg", "demo3.jpeg", 
+                           "demo4.jpeg", "demo5.jpg", "demo6.jpg"]
+            
+            if filename not in allowed_files:
+                raise HTTPException(status_code=400, detail="Invalid demo image")
+            
+            # Construct safe path using BASE_DIR for Vercel compatibility
+            file_path = BASE_DIR / "static" / "demo-images" / filename
+            
+            # Additional check to ensure we're within the demo-images directory
+            abs_path = os.path.abspath(str(file_path))
+            demo_dir = os.path.abspath(str(BASE_DIR / "static" / "demo-images"))
+            
+            if not abs_path.startswith(demo_dir):
+                raise HTTPException(status_code=400, detail="Invalid file path")
             
             try:
                 with open(file_path, "rb") as f:
@@ -282,15 +347,11 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
                         mime_type = "image/jpeg"  # default
                     image_input = f"data:{mime_type};base64,{file_base64}"
             except Exception as e:
-                print(f"Error reading demo image: {e}")
-                # Fallback to a working sample image
-                image_input = "https://replicate.delivery/pbxt/KFLSMiEgtCRgVnbkB5t5ogPphmNgLfBdJPQ5fpbMC24GAnbM/before.jpg"
+                # Don't expose internal error details
+                raise HTTPException(status_code=500, detail="Failed to process image")
         else:
             # Assume it's base64 without data URL prefix
             image_input = f"data:image/png;base64,{image['data']}"
-        
-        print(f"Final image_input type: {type(image_input)}")
-        print(f"Final image_input preview: {image_input[:100]}")
         
         # Run Interior AI model by erayyavuz
         # This model is specifically trained for interior design transformations
@@ -311,7 +372,6 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
                 # It's a file-like object, read the bytes
                 content = output.read()
                 generated_url = f"data:image/png;base64,{base64.b64encode(content).decode('utf-8')}"
-                print(f"Successfully read {len(content)} bytes from output")
             elif isinstance(output, bytes):
                 # Direct bytes
                 generated_url = f"data:image/png;base64,{base64.b64encode(output).decode('utf-8')}"
@@ -330,17 +390,16 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
                     generated_url = str(first)
             else:
                 # Fallback
-                print(f"Unknown output type: {type(output)}")
                 generated_url = image["data"]
         except Exception as e:
-            print(f"Error processing output: {e}")
+            # Don't expose error details, use fallback
             generated_url = image["data"]
         
         # Store generated image
         generated_image = {
             "id": str(uuid.uuid4()),
             "original_id": image_id,
-            "style": request.style,
+            "style": renovation_request.style,
             "data": generated_url,
             "generated_at": datetime.now().isoformat()
         }
@@ -352,14 +411,14 @@ async def renovate_image(house_id: str, image_id: str, request: RenovateRequest)
             "id": generated_image["id"],
             "status": "succeeded",
             "output": [str(generated_image["data"])],  # Ensure string
-            "style": request.style
+            "style": renovation_request.style
         }
         
     except Exception as e:
-        import traceback
-        error_detail = f"Generation failed: {str(e)}\n{traceback.format_exc()}"
-        print(f"Error in renovate endpoint: {error_detail}")
-        raise HTTPException(status_code=500, detail=f"画像生成に失敗しました: {str(e)}")
+        # Log the error internally but don't expose details to client
+        import logging
+        logging.error(f"Error in renovate endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="画像生成に失敗しました")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

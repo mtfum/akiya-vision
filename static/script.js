@@ -5,6 +5,16 @@ let selectedImageData = null;
 let houses = [];
 let lastSelectedStyle = null;
 
+// HTML escape function to prevent XSS
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // Toggle mobile menu
 function toggleMenu() {
     const menu = document.getElementById('mobileMenu');
@@ -34,25 +44,25 @@ function renderHouses() {
     const grid = document.getElementById('houseGrid');
     grid.innerHTML = houses.map(house => `
         <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition cursor-pointer" 
-             onclick="selectHouse('${house.id}')">
+             onclick="selectHouse('${escapeHtml(house.id)}')">
             <div class="p-6">
-                <h3 class="text-xl font-semibold mb-2">${house.name}</h3>
-                <p class="text-gray-600 mb-4">${house.address}</p>
+                <h3 class="text-xl font-semibold mb-2">${escapeHtml(house.name)}</h3>
+                <p class="text-gray-600 mb-4">${escapeHtml(house.address)}</p>
                 <div class="grid grid-cols-2 gap-4 text-sm">
                     <div>
                         <span class="font-medium">価格:</span>
-                        <span class="text-blue-600 font-bold">${house.price}</span>
+                        <span class="text-blue-600 font-bold">${escapeHtml(house.price)}</span>
                     </div>
                     <div>
                         <span class="font-medium">面積:</span>
-                        <span>${house.area}</span>
+                        <span>${escapeHtml(house.area)}</span>
                     </div>
                     <div>
                         <span class="font-medium">築年数:</span>
-                        <span>${house.age}</span>
+                        <span>${escapeHtml(house.age)}</span>
                     </div>
                 </div>
-                <p class="text-gray-600 text-sm mt-4">${house.description}</p>
+                <p class="text-gray-600 text-sm mt-4">${escapeHtml(house.description)}</p>
             </div>
         </div>
     `).join('');
@@ -96,9 +106,9 @@ async function loadDemoImages(houseId) {
         
         const container = document.getElementById('demoImages');
         container.innerHTML = demoImages.map(img => `
-            <div class="cursor-pointer hover:opacity-80 transition" onclick="selectDemoImage('${img.url}', '${img.name}', '${img.id}')">
-                <img src="${img.url}" alt="${img.name}" class="w-full h-24 object-cover rounded-lg demo-image" data-id="${img.id}">
-                <p class="text-xs text-center mt-1 text-gray-600">${img.name}</p>
+            <div class="cursor-pointer hover:opacity-80 transition" onclick="selectDemoImage('${escapeHtml(img.url)}', '${escapeHtml(img.name)}', '${escapeHtml(img.id)}')">
+                <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.name)}" class="w-full h-24 object-cover rounded-lg demo-image" data-id="${escapeHtml(img.id)}">
+                <p class="text-xs text-center mt-1 text-gray-600">${escapeHtml(img.name)}</p>
             </div>
         `).join('');
     } catch (error) {
@@ -208,10 +218,10 @@ async function generateRenovation(style) {
 
 // Display before/after comparison
 function displayBeforeAfter(beforeUrl, afterUrl) {
-    // Swap the images so: bottom layer = after (generated), top clipped layer = before (original)
-    // This way sliding right reveals more of the after image
-    document.getElementById('beforeImage').src = afterUrl;  // Generated image as base
-    document.getElementById('afterImage').src = beforeUrl;   // Original image on top (clipped)
+    // Set images correctly: bottom layer = before (original), top clipped layer = after (generated)
+    // This way sliding left reveals more of the before image
+    document.getElementById('beforeImage').src = beforeUrl;  // Original image as base
+    document.getElementById('afterImage').src = afterUrl;    // Generated image on top (clipped)
     
     // Hide loading, show slider
     document.getElementById('loadingState').classList.add('hidden');
@@ -222,7 +232,7 @@ function displayBeforeAfter(beforeUrl, afterUrl) {
     const divider = slider.querySelector('.slider-divider');
     const afterContainer = slider.querySelector('.overflow-hidden');
     
-    // Position at far left to show original image first
+    // Position at far left to show before image first
     divider.style.left = '0%';
     afterContainer.style.clipPath = 'inset(0 100% 0 0)';
 }
@@ -353,14 +363,42 @@ function submitInquiry(event) {
     
     // Get form data
     const formData = {
-        name: document.getElementById('name').value,
-        email: document.getElementById('email').value,
-        phone: document.getElementById('phone').value,
-        message: document.getElementById('message').value,
+        name: document.getElementById('name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        message: document.getElementById('message').value.trim(),
         houseId: selectedHouseId,
         imageId: selectedImageId,
         selectedStyle: lastSelectedStyle
     };
+    
+    // Validate form data
+    if (!formData.name || formData.name.length > 100) {
+        alert('お名前を正しく入力してください（100文字以内）');
+        return;
+    }
+    
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email || !emailRegex.test(formData.email) || formData.email.length > 255) {
+        alert('メールアドレスを正しく入力してください');
+        return;
+    }
+    
+    // Phone validation (optional, but if provided must be valid)
+    if (formData.phone) {
+        const phoneRegex = /^[\d\-\+\(\)\s]+$/;
+        if (!phoneRegex.test(formData.phone) || formData.phone.length > 20) {
+            alert('電話番号を正しく入力してください');
+            return;
+        }
+    }
+    
+    // Message validation
+    if (formData.message && formData.message.length > 1000) {
+        alert('メッセージは1000文字以内で入力してください');
+        return;
+    }
     
     // In a real application, you would send this to a backend
     console.log('Inquiry submitted:', formData);
