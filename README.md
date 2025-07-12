@@ -1,5 +1,7 @@
 # AkiyaVision (アキヤビジョン)
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmtfum%2Fakiya-vision&env=REPLICATE_API_TOKEN&envDescription=API%20token%20for%20Replicate%20AI%20service&envLink=https%3A%2F%2Freplicate.com%2Faccount%2Fapi-tokens)
+
 AI-powered web application for visualizing renovated vacant houses (空き家) in Japan using Stable Diffusion image generation.
 
 ## Features
@@ -108,3 +110,33 @@ akiya-vision/
 - Image generation: ~$0.002 per image
 - Generation time: 1+ minutes per image
 - Specialized interior design AI model for better renovation results
+
+## Deployment
+
+### Deploy to Vercel
+
+1. Click the "Deploy with Vercel" button at the top of this README
+2. Create a new repository or connect to an existing one
+3. Add your `REPLICATE_API_TOKEN` environment variable
+4. Deploy!
+
+### Manual Deployment
+
+1. Install Vercel CLI:
+```bash
+npm i -g vercel
+```
+
+2. Deploy to Vercel:
+```bash
+vercel
+```
+
+3. Set environment variables in Vercel dashboard:
+   - Go to Settings → Environment Variables
+   - Add `REPLICATE_API_TOKEN` with your Replicate API token
+
+4. Deploy to production:
+```bash
+vercel --prod
+```
