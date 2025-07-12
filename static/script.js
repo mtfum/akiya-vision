@@ -218,23 +218,23 @@ async function generateRenovation(style) {
 
 // Display before/after comparison
 function displayBeforeAfter(beforeUrl, afterUrl) {
-    // Set images correctly: bottom layer = before (original), top clipped layer = after (generated)
-    // This way sliding left reveals more of the before image
-    document.getElementById('beforeImage').src = beforeUrl;  // Original image as base
-    document.getElementById('afterImage').src = afterUrl;    // Generated image on top (clipped)
+    // Set images correctly: bottom layer = after (generated), top clipped layer = before (original)
+    // This way sliding right reveals more of the after image
+    document.getElementById('beforeImage').src = afterUrl;   // Generated image as base
+    document.getElementById('afterImage').src = beforeUrl;    // Original image on top (clipped)
     
     // Hide loading, show slider
     document.getElementById('loadingState').classList.add('hidden');
     document.getElementById('sliderContainer').classList.remove('hidden');
     
-    // Start slider from the left to show the "Before" image first
+    // Start slider in the middle
     const slider = document.getElementById('beforeAfterSlider');
     const divider = slider.querySelector('.slider-divider');
     const afterContainer = slider.querySelector('.overflow-hidden');
     
-    // Position at far left to show before image first
-    divider.style.left = '0%';
-    afterContainer.style.clipPath = 'inset(0 100% 0 0)';
+    // Position at middle to show both images
+    divider.style.left = '50%';
+    afterContainer.style.clipPath = 'inset(0 50% 0 0)';
 }
 
 // Setup before/after slider
@@ -301,8 +301,8 @@ function showBeforeImage() {
     const divider = slider.querySelector('.slider-divider');
     const afterContainer = slider.querySelector('.overflow-hidden');
     
-    // Animate to show full Before image (left side)
-    animateSlider(divider, afterContainer, 0);
+    // Animate to show full Before image (slide to right to show top layer)
+    animateSlider(divider, afterContainer, 100);
 }
 
 // Show After image completely
@@ -311,8 +311,8 @@ function showAfterImage() {
     const divider = slider.querySelector('.slider-divider');
     const afterContainer = slider.querySelector('.overflow-hidden');
     
-    // Animate to show full After image (right side)
-    animateSlider(divider, afterContainer, 100);
+    // Animate to show full After image (slide to left to hide top layer)
+    animateSlider(divider, afterContainer, 0);
 }
 
 // Animate slider to target position

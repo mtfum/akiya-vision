@@ -313,7 +313,6 @@ async def renovate_image(house_id: str, image_id: str, renovation_request: Renov
         elif image["data"].startswith("/static/demo-images/"):
             # It's a local demo image - read the file and convert to base64
             # Extract just the filename to prevent path traversal
-            import os.path
             filename = os.path.basename(image["data"])
             
             # Validate filename - only allow specific demo images
