@@ -151,29 +151,33 @@ DEMO_IMAGES = {
     ]
 }
 
-# In-memory storage
-houses_db: Dict[str, House] = {
-    "house1": House(
-        id="house1",
-        name="世田谷区 - 古民家",
-        address="東京都世田谷区",
-        price="3,800万円",
-        area="180㎡",
-        age="築80年",
-        description="伝統的な日本家屋。広い庭付き。リノベーション向き。",
-        images=[]
-    ),
-    "house2": House(
-        id="house2",
-        name="杉並区 - 一戸建て",
-        address="東京都杉並区",
-        price="5,200万円",
-        area="120㎡",
-        age="築50年",
-        description="静かな住宅街の一軒家。駅から徒歩15分。",
-        images=[]
-    )
-}
+# Get demo houses data - function ensures data is always available in serverless
+def get_demo_houses() -> Dict[str, House]:
+    return {
+        "house1": House(
+            id="house1",
+            name="世田谷区 - 古民家",
+            address="東京都世田谷区",
+            price="3,800万円",
+            area="180㎡",
+            age="築80年",
+            description="伝統的な日本家屋。広い庭付き。リノベーション向き。",
+            images=[]
+        ),
+        "house2": House(
+            id="house2",
+            name="杉並区 - 一戸建て",
+            address="東京都杉並区",
+            price="5,200万円",
+            area="120㎡",
+            age="築50年",
+            description="静かな住宅街の一軒家。駅から徒歩15分。",
+            images=[]
+        )
+    }
+
+# In-memory storage - initialized with demo data
+houses_db: Dict[str, House] = get_demo_houses()
 
 # Renovation styles and prompts
 RENOVATION_STYLES = {
@@ -249,6 +253,9 @@ async def root(request: Request):
 @limiter.limit("100/minute")
 async def get_houses(request: Request):
     """Get all houses"""
+    # Ensure demo data is available in serverless environment
+    if not houses_db:
+        houses_db.update(get_demo_houses())
     return list(houses_db.values())
 
 @app.get("/api/demo-images/{house_type}")
@@ -267,6 +274,10 @@ async def get_demo_images(house_type: str, request: Request):
 @limiter.limit("10/hour")  # Strict limit for expensive AI operations
 async def renovate_image(house_id: str, image_id: str, renovation_request: RenovateRequest, request: Request):
     """Generate a renovated version of the image"""
+    # Ensure demo data is available in serverless environment
+    if not houses_db:
+        houses_db.update(get_demo_houses())
+    
     if house_id not in houses_db:
         raise HTTPException(status_code=404, detail="House not found")
     
